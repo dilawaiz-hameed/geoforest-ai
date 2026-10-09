@@ -1,0 +1,73 @@
+name: CD
+
+# Deployment is a consequence of merging to main, never a manual step.
+# main is protected, so the only way here is a reviewed PR with CI green.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Hugging Face Spaces
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ vars.HF_USERNAME }}-${{ vars.HF_SPACE }}.hf.space
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Spaces is a git remote; it needs real history to fast-forward.
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ vars.HF_USERNAME }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git push --force \
+            "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}" \
+            HEAD:main
+
+      # A push that lands is not a deployment that works. The Space
+      # rebuilds the image, so poll until it serves, and fail loudly if
+      # it never does.
+      - name: Wait for the Space to come back up
+        env:
+          SPACE_URL: https://${{ vars.HF_USERNAME }}-${{ vars.HF_SPACE }}.hf.space
+        run: |
+          echo "Polling ${SPACE_URL} for up to 15 minutes…"
+          for i in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "${SPACE_URL}/_stcore/health" || true)
+            if [ "$code" = "200" ]; then
+              echo "Space is live after $((i * 10))s."
+              exit 0
+            fi
+            echo "  attempt ${i}: HTTP ${code}"
+            sleep 10
+          done
+          echo "Space did not become healthy in time." >&2
+          exit 1
+
+      - name: Record the deployment
+        if: always()
+        env:
+          SPACE_URL: https://${{ vars.HF_USERNAME }}-${{ vars.HF_SPACE }}.hf.space
+        run: |
+          {
+            echo "### Deployment"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Commit | \`${GITHUB_SHA::7}\` |"
+            echo "| Status | ${{ job.status }} |"
+            echo "| URL | ${SPACE_URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"
