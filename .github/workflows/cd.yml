@@ -13,54 +13,53 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy to Hugging Face Spaces
+    name: Deploy to Render
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://${{ vars.HF_USERNAME }}-${{ vars.HF_SPACE }}.hf.space
+      url: ${{ vars.SERVICE_URL }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          # Spaces is a git remote; it needs real history to fast-forward.
-          fetch-depth: 0
-          lfs: true
-
-      - name: Push to the Space
+      - name: Check the deployment is configured
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_USERNAME: ${{ vars.HF_USERNAME }}
-          HF_SPACE: ${{ vars.HF_SPACE }}
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          SERVICE_URL: ${{ vars.SERVICE_URL }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git push --force \
-            "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}" \
-            HEAD:main
+          missing=0
+          [ -n "$HOOK" ] || { echo "::error::secret RENDER_DEPLOY_HOOK is not set"; missing=1; }
+          [ -n "$SERVICE_URL" ] || { echo "::error::variable SERVICE_URL is not set"; missing=1; }
+          exit $missing
 
-      # A push that lands is not a deployment that works. The Space
-      # rebuilds the image, so poll until it serves, and fail loudly if
-      # it never does.
-      - name: Wait for the Space to come back up
+      - name: Trigger the deploy
         env:
-          SPACE_URL: https://${{ vars.HF_USERNAME }}-${{ vars.HF_SPACE }}.hf.space
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$HOOK" -o /dev/null
+
+      # A triggered deploy is not a working one. Render's free tier replaces
+      # the instance rather than draining it, so the service goes down and
+      # then comes back: poll until it serves again, and fail if it never does.
+      - name: Wait for the service to come back up
+        env:
+          SERVICE_URL: ${{ vars.SERVICE_URL }}
         run: |
-          echo "Polling ${SPACE_URL} for up to 15 minutes…"
+          echo "Build and boot take a few minutes; polling ${SERVICE_URL}"
+          sleep 60
           for i in $(seq 1 90); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "${SPACE_URL}/_stcore/health" || true)
+            code=$(curl -s -o /dev/null -m 15 -w "%{http_code}" \
+                   "${SERVICE_URL}/_stcore/health" || true)
             if [ "$code" = "200" ]; then
-              echo "Space is live after $((i * 10))s."
+              echo "Service is live after $((60 + i * 10))s."
               exit 0
             fi
             echo "  attempt ${i}: HTTP ${code}"
             sleep 10
           done
-          echo "Space did not become healthy in time." >&2
+          echo "::error::Service did not become healthy within 15 minutes."
           exit 1
 
       - name: Record the deployment
         if: always()
         env:
-          SPACE_URL: https://${{ vars.HF_USERNAME }}-${{ vars.HF_SPACE }}.hf.space
+          SERVICE_URL: ${{ vars.SERVICE_URL }}
         run: |
           {
             echo "### Deployment"
@@ -69,5 +68,5 @@ jobs:
             echo "| --- | --- |"
             echo "| Commit | \`${GITHUB_SHA::7}\` |"
             echo "| Status | ${{ job.status }} |"
-            echo "| URL | ${SPACE_URL} |"
+            echo "| URL | ${SERVICE_URL} |"
           } >> "$GITHUB_STEP_SUMMARY"

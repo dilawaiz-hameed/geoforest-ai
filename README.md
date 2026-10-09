@@ -1,15 +1,3 @@
----
-title: GeoForest AI
-emoji: 🌲
-colorFrom: green
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
-license: mit
-short_description: Individual tree detection and counting from satellite imagery
----
-
 # GeoForest AI
 
 Individual tree detection, counting and size classification from aerial and
@@ -120,14 +108,16 @@ over 32 MB or edges over 4096 px (413), and invalid parameters (422).
 | Workflow | Trigger | Does |
 | --- | --- | --- |
 | `ci.yml` | PR and push to `main`/`develop` | ruff lint and format; pytest on Python 3.10/3.11/3.12 with a 90% coverage floor on `src/geoforest`; builds the Docker image, starts it, and runs a real `/detect` request against the running container |
-| `cd.yml` | push to `main` | pushes to the Hugging Face Space, then polls the live URL until it serves — a push that lands but does not come back up fails the job |
+| `cd.yml` | push to `main` | triggers the Render deploy, then polls the live URL until it serves — a deploy that starts but never comes back up fails the job |
 
 The image build and container smoke test are in CI, not only CD, because
 "it works on my machine" and "the deployed thing answers" are different
 claims and the second one is what the evaluation sees.
 
-Deployment needs repository variables `HF_USERNAME` and `HF_SPACE`, and a
-secret `HF_TOKEN` with write access to the Space.
+Deployment needs a repository secret `RENDER_DEPLOY_HOOK` and a variable
+`SERVICE_URL`. The deployed service runs the same Dockerfile CI tested, on
+Render's free tier, which sleeps when idle — the first request after a quiet
+spell takes about a minute to wake.
 
 ## Data
 
