@@ -1,0 +1,3 @@
+# Model layer. Installed in the Docker image and on the GPU workstation,
+# not in the fast CI job. Install CPU torch first (see Dockerfile).
+deepforest==2.1.0
