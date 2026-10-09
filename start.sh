@@ -8,7 +8,7 @@ set -euo pipefail
 API_PORT="${API_PORT:-8000}"
 PORT="${PORT:-7860}"
 
-uvicorn api.main:app --host 127.0.0.1 --port "${API_PORT}" --log-level info &
+uvicorn api.main:app --host 0.0.0.0 --port "${API_PORT}" --log-level info &
 api_pid=$!
 
 # Stop the API if the interface exits, so the container does not linger half-up.
