@@ -99,7 +99,7 @@ class DeepForestDetector:
         self.score_threshold = score_threshold
         self._model = None
 
-    def _load(self):
+    def _load(self):  # pragma: no cover - needs torch and released weights
         if self._model is None:
             from deepforest import main as deepforest_main
 
@@ -115,8 +115,15 @@ class DeepForestDetector:
         if tile.ndim != 3 or tile.shape[2] != 3:
             raise ValueError(f"expected (H, W, 3) RGB tile, got shape {tile.shape}")
 
-        model = self._load()
-        # DeepForest expects BGR uint8 when handed a raw array.
+        return self._infer(self._load(), tile)
+
+    def _infer(self, model, tile: np.ndarray) -> np.ndarray:
+        """Translate DeepForest's dataframe into the protocol's array.
+
+        Split out from :meth:`predict` so the column mapping and the score
+        filter can be tested against a fake model, without torch or weights.
+        """
+        # DeepForest expects BGR when handed a raw array.
         frame = model.predict_image(image=tile[:, :, ::-1].astype("float32"))
         if frame is None or len(frame) == 0:
             return np.empty((0, 5), dtype=float)

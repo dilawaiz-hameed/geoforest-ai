@@ -58,7 +58,8 @@ src/geoforest/     core module, pure NumPy — no ML dependency
   pipeline.py        tile -> detect -> shift -> merge -> count
 api/main.py        FastAPI service (/health, /detect)
 app/streamlit_app.py  operator interface; talks to the API over HTTP
-tests/             58 tests, no network, no model weights
+tests/             94 tests, no network, no model weights
+scripts/           reproduces the figures quoted above
 ```
 
 ### The detector is swappable on purpose
