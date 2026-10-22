@@ -26,8 +26,16 @@ for _ in $(seq 1 60); do
     sleep 1
 done
 
+# XSRF and CORS are off because the platform's reverse proxy drops the
+# token Streamlit expects on /_stcore/upload_file, and file upload then
+# fails with no error shown. Streamlit ignores enableXsrfProtection unless
+# enableCORS is also false, so both go together. The app holds no session
+# state and no credentials, so there is nothing for a forged request to do
+# beyond uploading an image to itself.
 exec streamlit run app/streamlit_app.py \
     --server.port "${PORT}" \
     --server.address 0.0.0.0 \
     --server.headless true \
+    --server.enableCORS false \
+    --server.enableXsrfProtection false \
     --browser.gatherUsageStats false
